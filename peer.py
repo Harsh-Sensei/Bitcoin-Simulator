@@ -70,18 +70,24 @@ class Peer:
         self.all_txn_list = []
         self.peer_list = []
         self.sent_txns = []
-        self.amount_list = []
+        self.amount_list = np.zeros(total_nodes)
+        self.id_to_txn_dict = {}
         self.hash_to_block_dict = {genesis_block.get_id() : genesis_block}
-        self.hash_to_time_dict = {genesis_block.get_id() : self.env.now()}
-        self.chain_heads = [genesis_block.get_id()]
+        self.hash_to_time_dict = {genesis_block.get_id() : self.env.now}
         self.blockchain_edgelist = []
+        self.hash_to_height_dict = {genesis_block.get_id() : 0}
+        self.chain_head = genesis_block.get_id()
+        self.chain_height = 0
 
     def run(self):
         while True:
             coins = random.random()*MAX_COIN
-            txn = Transaction(self.node, np.random.randint(0, self.total_nodes), coins)
+            receiver = self.node
+            while receiver == self.node:
+                receiver = random.randint(0, self.total_nodes-1)
+            txn = Transaction(self.node, receiver, coins)
             self.txn_list.append(txn)
-            self.all_txn_list.append(txn)   
+            self.id_to_txn_dict[txn.get_id()] = txn   
             yield self.env.timeout(np.random.exponential(self.mean))
             print(txn)
             yield self.env.process(self.send_txn(self.node, txn))
@@ -93,15 +99,81 @@ class Peer:
         self.fraction_hashing_power = h
 
     def receive_txn(self, sender, txn):
-        self.all_txn_list.append(txn)
+        self.id_to_txn_dict[txn.get_id()] = txn   
         print(f"Transaction {txn.get_id()} from {sender} received by {self.node}")
         yield self.env.process(self.send_txn(sender, txn))
 
     def receive_blk(self, sender, blk):
         ### Verification of the block left
-        ### Adding to one of the chains
-        ### Changing the amount owned by each peer
+        for txn in blk.block_txn_list:
+            if self.amount_list[txn.sender] < txn.amount:
+                print("Invalid transaction")
+                return
+
+        ### Fork resolution
+        rewire = False
+        if blk.prev_hash in self.hash_to_height_dict:
+            height = self.hash_to_height_dict[blk.prev_hash] + 1
+            if height > self.chain_height:
+                rewire = True
+            self.hash_to_height_dict[blk.get_id()] = height
+            self.hash_to_block_dict[blk.get_id()] = blk
+            self.hash_to_time_dict[blk.get_id()] = self.env.now
+            self.blockchain_edgelist.append((blk.prev_hash, blk.get_id()))
+        else:
+            return
+        if not rewire:
+            for txn in blk.block_txn_list:
+                if txn.sender is None:
+                    self.amount_list[txn.receiver] += txn.amount
+                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                    continue
+                self.amount_list[txn.sender] -= txn.amount
+                self.amount_list[txn.receiver] += txn.amount
+                self.id_to_txn_dict.pop(txn.get_id(), default=None)
+        else:
+            parent_hash = None
+            curr_blk_id = self.chain_head
+            hash1 = blk.prev_hash
+            hash2 = self.chain_head
+            self.chain_head = blk.get_id()
+            self.chain_height = self.hash_to_height_dict[blk.get_id()]
+            while parent_hash is None:
+                if hash1 == hash2:
+                    parent_hash = hash1
+                else:
+                    hash1 = self.hash_to_block_dict[hash1].prev_hash
+                    hash2 = self.hash_to_block_dict[hash2].prev_hash
+            
+            lagging_hash = None
+            while curr_blk_id != parent_hash:
+                curr_blk = self.hash_to_block_dict[curr_blk_id]
+                for txn in curr_blk.block_txn_list:
+                    if txn.sender is None:
+                        self.amount_list[txn.receiver] -= txn.amount
+                        self.id_to_txn_dict[txn.get_id()] = txn
+                        continue
+                    self.amount_list[txn.sender] += txn.amount
+                    self.amount_list[txn.receiver] -= txn.amount
+                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                lagging_hash = curr_blk_id
+                curr_blk_id = curr_blk.prev_hash
+
+            while lagging_hash != blk.get_id():
+                curr_blk = self.hash_to_block_dict[lagging_hash]
+                for txn in curr_blk.block_txn_list:
+                    if txn.sender is None:
+                        self.amount_list[txn.receiver] += txn.amount
+                        self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                        continue
+                    self.amount_list[txn.sender] -= txn.amount
+                    self.amount_list[txn.receiver] += txn.amount
+                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                lagging_hash = curr_blk.prev_hash
+                
         ### Mining for new block 
+        
+
         print(f"Block {blk.get_id()} from {sender} received by {self.node}")
         yield self.env.process(self.send_blk(sender, txn))
     
