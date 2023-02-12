@@ -12,6 +12,7 @@ class Simulator:
         self.delay = Delays(args.n, graph.fast_nodes)
         self.peer_list = [Peer(i, 5, args.n, env, self.delay) for i in range(args.n)]
         self.set_all_peer_list()
+        self.set_all_fhp()
 
     def start_simulation(self):
         for elem in self.peer_list:
@@ -27,4 +28,13 @@ class Simulator:
         
         for elem in self.peer_list:
             elem.set_peer_list(peer_dict[elem.node])
-            
+    
+    def set_all_fhp(self):
+        unit_hp = 1/(10*len(self.graph.highcpu_nodes) + len(self.graph.lowcpu_nodes))
+        for elem in self.peer_list:
+            if elem.node in self.graph.highcpu_nodes:
+                elem.set_fraction_hashing_power(10*unit_hp)
+            else:
+                elem.set_fraction_hashing_power(unit_hp)
+    
+
