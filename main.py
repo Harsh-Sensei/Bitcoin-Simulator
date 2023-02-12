@@ -19,5 +19,5 @@ if __name__ == "__main__":
     g = grph.create_graph()
     g.write_svg("graph.svg")
 
-    Simulator(args).start_simulation()
+    Simulator(args, grph).start_simulation()
 

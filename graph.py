@@ -33,8 +33,9 @@ class Graph:
             except:
                 curr_try += 1
                 continue
+        self.edgelist = [elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]
         
-        p_graph = ig.Graph(self.n, self.graph.get_edgelist())
+        p_graph = ig.Graph(self.n, self.edgelist)
         p_graph.vs["label"] = range(self.n)
         p_graph.vs["color"] = "blue"
         p_graph.vs["size"] = 0.6
@@ -51,7 +52,7 @@ class Graph:
                 self.slow_nodes.append(i)
             else:
                 self.fast_nodes.append(i)
-
+        
         return p_graph
 
 
@@ -65,4 +66,5 @@ if __name__ == "__main__":
     test_args = Dict2Class(test_args)
     graph = Graph(test_args)
     out_graph = graph.create_graph()
+    print(len(out_graph.get_edgelist()))
     ig.plot(out_graph, "test")

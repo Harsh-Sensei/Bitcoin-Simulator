@@ -58,11 +58,12 @@ class Block:
         return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)).encode()).hexdigest()
 
 class Peer:
-    def __init__(self, node, mean, total_nodes, env):
+    def __init__(self, node, mean, total_nodes, env, delay):
         self.node = node
         self.mean = mean
         self.total_nodes = total_nodes
         self.env = env
+        self.delay = delay
         self.txn_list = []
         self.all_txn_list = []
         self.peer_list = []
@@ -77,19 +78,27 @@ class Peer:
             self.all_txn_list.append(txn)   
             yield self.env.timeout(np.random.exponential(self.mean))
             print(txn)
+            yield self.env.process(self.send_txn(self.node, txn))
     
     def set_peer_list(self, peer_list):
         self.peer_list = peer_list
 
     def receive_txn(self, sender, txn):
         self.all_txn_list.append(txn)
-        return True
+        print(f"Transaction {txn.get_id()} from {sender} received by {self.node}")
+        yield self.env.process(self.send_txn(sender, txn))
     
     def send_txn(self, exclude, txn):
         for peer in self.peer_list:
             if peer.node != exclude and (peer.node, txn.get_id()) not in self.sent_txns:
-                peer.receive_txn(self.node, txn)
+                yield self.env.process(self.send_txn_one(self.node, peer, txn))
                 self.sent_txns.append((peer.node, txn.get_id()))
-        return True
+            else:
+                print(f"Skipping node {peer.node} by {self.node}")
+    
+    def send_txn_one(self, s, r, txn):
+        yield self.env.timeout(self.delay.get_delay(s, r.node, 1))
+        print(f"Sent trasaction {txn.get_id()} to {r.node} by {s}")
+        r.receive_txn(s, txn)
 
 
