@@ -12,8 +12,9 @@ HIGH_RHO = 500
 QUEUE_DELAY_FACTOR = 96
 MAX_BLOCK_SIZE = 1000
 MAX_COIN = 30
-AVG_INTER_ARRIVAL = 10
+AVG_INTER_ARRIVAL = 100
 MAX_TRANSACTION = 998
+TOTAL_NODES = 20 # will be updated in main.py
 
 class Transaction:
     def __init__(self, sender, receiver, amount):
@@ -44,19 +45,29 @@ class Delays:
         + data_size*self.inv_link_speed[sender, receiver])
     
 class Block:
-    def __init__(self, prev_hash):
+    def __init__(self, prev_hash, total_nodes=TOTAL_NODES):
         self.prev_hash = prev_hash
         self.block_size = 1
         self.block_txn_list = []
+        self.total_nodes = total_nodes
+        self.amount_list = np.zeros(self.total_nodes)
 
-    
     def add_txn(self, txn):
         if self.block_size <= MAX_BLOCK_SIZE:
+            if txn.sender is None:
+                self.amount_list[txn.receiver] += txn.amount
+                self.block_txn_list.append(txn)
+                return True
+            if self.amount_list[txn.sender] < txn.amount:
+                return False
+            self.amount_list[txn.sender] -= txn.amount
+            self.amount_list[txn.receiver] += txn.amount
             self.block_txn_list.append(txn)
             self.block_size += 1
             return True
         else:
             return False
+
     
     def get_id(self):
         return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)).encode()).hexdigest()
@@ -96,22 +107,29 @@ class Peer:
             self.id_to_txn_dict[txn.get_id()] = txn   
             yield self.env.timeout(np.random.exponential(self.mean))
             print(txn)
-            yield self.env.process(self.send_txn(self.node, txn))
+            self.send_txn(self.node, txn)
     
     def set_peer_list(self, peer_list):
         self.peer_list = peer_list
+        print(f"Node {self.node} has peer list {[elem.node for elem in self.peer_list]}")
     
     def set_fraction_hashing_power(self, h):
         self.fraction_hashing_power = h
 
     def receive_txn(self, sender, txn):
         self.id_to_txn_dict[txn.get_id()] = txn   
-        print(f"Transaction {txn.get_id()} from {sender} received by {self.node}")
-        yield self.env.process(self.send_txn(sender, txn))
+        print(f"Transaction {txn.get_id()} from {sender} received by {self.node}; amount = {txn}; time = {self.env.now};")
+        self.send_txn(sender, txn)
+        return
 
     def receive_blk(self, sender, blk):
+        print(f"Block {blk.get_id()} from {sender} received by {self.node}; time = {self.env.now};")
+        if blk.get_id() in self.hash_to_block_dict:
+            return
         ### Verification of the block left
         for txn in blk.block_txn_list:
+            if txn.sender is None:
+                continue
             if self.amount_list[txn.sender] < txn.amount:
                 print("Invalid transaction")
                 return
@@ -138,6 +156,7 @@ class Peer:
                 self.amount_list[txn.receiver] += txn.amount
                 self.id_to_txn_dict.pop(txn.get_id(), None)
         else:
+            print("Resolving fork")
             parent_hash = None
             curr_blk_id = self.chain_head
             hash1 = blk.prev_hash
@@ -164,9 +183,10 @@ class Peer:
                     self.id_to_txn_dict.pop(txn.get_id(), None)
                 lagging_hash = curr_blk_id
                 curr_blk_id = curr_blk.prev_hash
-
-            while lagging_hash != blk.get_id():
-                curr_blk = self.hash_to_block_dict[lagging_hash]
+            
+            curr_blk_id = blk.get_id()
+            while curr_blk_id != parent_hash:
+                curr_blk = self.hash_to_block_dict[curr_blk_id]
                 for txn in curr_blk.block_txn_list:
                     if txn.sender is None:
                         self.amount_list[txn.receiver] += txn.amount
@@ -175,31 +195,33 @@ class Peer:
                     self.amount_list[txn.sender] -= txn.amount
                     self.amount_list[txn.receiver] += txn.amount
                     self.id_to_txn_dict.pop(txn.get_id(), None)
-                lagging_hash = curr_blk.prev_hash
+                curr_blk_id = curr_blk.prev_hash
 
         ### Mining for new block 
         self.mining_process.interrupt()
-        yield self.env.process(self.send_block(sender, blk))
         print(f"Block {blk.get_id()} from {sender} received by {self.node}")
-        yield self.env.process(self.send_blk(sender, txn))
+        self.send_block(sender, blk)
     
     def send_txn(self, exclude, txn):
         for peer in self.peer_list:
             if peer.node != exclude and (peer.node, txn.get_id()) not in self.sent_txns:
-                yield self.env.process(self.send_txn_one(self.node, peer, txn))
+                self.env.process(self.send_txn_one(self.node, peer, txn))
+                print("Sent transaction {} to {} by {}".format(txn.get_id(), peer.node, self.node))
                 self.sent_txns.append((peer.node, txn.get_id()))
             else:
-                print(f"Skipping txn to node {peer.node} by {self.node}")
+                print(f"Skipping txn {txn.get_id()} to node {peer.node} by {self.node}")
     
     def send_txn_one(self, s, r, txn):
+        # print('Sending transaction')
         yield self.env.timeout(self.delay.get_delay(s, r.node, 1))
-        print(f"Sent trasaction {txn.get_id()} to {r.node} by {s}")
         r.receive_txn(s, txn)
+        return
 
     def send_block(self, exclude, blk):
         for peer in self.peer_list:
             if peer.node != exclude and (peer.node, blk.get_id()) not in self.sent_blks:
-                yield self.env.process(self.send_block_one(self.node, peer, blk))
+                self.env.process(self.send_block_one(self.node, peer, blk))
+                print("Sent block {} to {} by {}".format(blk.get_id(), peer.node, self.node))
                 self.sent_blks.append((peer.node, blk.get_id()))
             else:
                 print(f"Skipping block to node {peer.node} by {self.node}")
@@ -215,11 +237,14 @@ class Peer:
             next_block = Block(self.chain_head)
             curr_num_txns = 0
             max_txn = random.randint(1, MAX_TRANSACTION)
+
+            next_block.amount_list = self.amount_list.copy()
             for key, val in self.id_to_txn_dict.items():
                 if curr_num_txns == max_txn:
                     break
-                next_block.add_txn(val)
-                curr_num_txns += 1
+                ret_val = next_block.add_txn(val)
+                if ret_val:
+                    curr_num_txns += 1
             next_block.add_txn(Transaction(None, self.node, 50))
             try:
                 yield self.env.timeout(np.random.exponential(mean))
@@ -228,6 +253,10 @@ class Peer:
                 continue
             self.chain_head = next_block.get_id()
             self.chain_height += 1
+            
+            self.hash_to_height_dict[next_block.get_id()] = self.chain_height
+            self.hash_to_block_dict[next_block.get_id()] = next_block
+            self.hash_to_time_dict[next_block.get_id()] = self.env.now
 
             for txn in next_block.block_txn_list:
                 if txn.sender is None:
@@ -237,6 +266,12 @@ class Peer:
                 self.amount_list[txn.sender] -= txn.amount
                 self.amount_list[txn.receiver] += txn.amount
                 self.id_to_txn_dict.pop(txn.get_id(), None)
-            print(f"Block mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}")
-            yield self.env.process(self.send_block(self.node, next_block))
+            self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id()))
+            self.send_block(self.node, next_block)
+            print(f"Block mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
+            print(f"Txns: {[str(elem) for elem in next_block.block_txn_list]}")
         
+    def print_tree(self, filename):
+        with open(filename, 'w') as f:
+            f.write("\n".join([f"{str(elem[0])}({self.hash_to_time_dict[elem[0]]}) --> {str(elem[1])}({self.hash_to_time_dict[elem[1]]})" 
+            for elem in self.blockchain_edgelist]))

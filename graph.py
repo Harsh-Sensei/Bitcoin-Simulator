@@ -33,8 +33,8 @@ class Graph:
             except:
                 curr_try += 1
                 continue
-        self.edgelist = [elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]
-        
+        self.edgelist = list(set([elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]))
+        print(self.edgelist)
         p_graph = ig.Graph(self.n, self.edgelist)
         p_graph.vs["label"] = range(self.n)
         p_graph.vs["color"] = "blue"
