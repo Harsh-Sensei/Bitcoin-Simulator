@@ -2,6 +2,7 @@ import numpy as np
 import random
 import hashlib
 import time
+import simpy
 
 np.random.seed(73)
 random.seed(73)
@@ -11,6 +12,8 @@ HIGH_RHO = 500
 QUEUE_DELAY_FACTOR = 96
 MAX_BLOCK_SIZE = 1000
 MAX_COIN = 30
+AVG_INTER_ARRIVAL = 10
+MAX_TRANSACTION = 998
 
 class Transaction:
     def __init__(self, sender, receiver, amount):
@@ -72,12 +75,15 @@ class Peer:
         self.sent_txns = []
         self.amount_list = np.zeros(total_nodes)
         self.id_to_txn_dict = {}
+        self.sent_blks = []
         self.hash_to_block_dict = {genesis_block.get_id() : genesis_block}
         self.hash_to_time_dict = {genesis_block.get_id() : self.env.now}
         self.blockchain_edgelist = []
         self.hash_to_height_dict = {genesis_block.get_id() : 0}
         self.chain_head = genesis_block.get_id()
         self.chain_height = 0
+        self.prev_mining_block_hash = None
+        self.mining_process = self.env.process(self.mine())
 
     def run(self):
         while True:
@@ -126,11 +132,11 @@ class Peer:
             for txn in blk.block_txn_list:
                 if txn.sender is None:
                     self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                    self.id_to_txn_dict.pop(txn.get_id(), None)
                     continue
                 self.amount_list[txn.sender] -= txn.amount
                 self.amount_list[txn.receiver] += txn.amount
-                self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                self.id_to_txn_dict.pop(txn.get_id(), None)
         else:
             parent_hash = None
             curr_blk_id = self.chain_head
@@ -155,7 +161,7 @@ class Peer:
                         continue
                     self.amount_list[txn.sender] += txn.amount
                     self.amount_list[txn.receiver] -= txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                    self.id_to_txn_dict.pop(txn.get_id(), None)
                 lagging_hash = curr_blk_id
                 curr_blk_id = curr_blk.prev_hash
 
@@ -164,16 +170,16 @@ class Peer:
                 for txn in curr_blk.block_txn_list:
                     if txn.sender is None:
                         self.amount_list[txn.receiver] += txn.amount
-                        self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                        self.id_to_txn_dict.pop(txn.get_id(), None)
                         continue
                     self.amount_list[txn.sender] -= txn.amount
                     self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), default=None)
+                    self.id_to_txn_dict.pop(txn.get_id(), None)
                 lagging_hash = curr_blk.prev_hash
-                
-        ### Mining for new block 
-        
 
+        ### Mining for new block 
+        self.mining_process.interrupt()
+        yield self.env.process(self.send_block(sender, blk))
         print(f"Block {blk.get_id()} from {sender} received by {self.node}")
         yield self.env.process(self.send_blk(sender, txn))
     
@@ -193,8 +199,8 @@ class Peer:
     def send_block(self, exclude, blk):
         for peer in self.peer_list:
             if peer.node != exclude and (peer.node, blk.get_id()) not in self.sent_blks:
-                yield self.env.process(self.send_blk_one(self.node, peer, txn))
-                self.sent_blks.append((peer.node, txn.get_id()))
+                yield self.env.process(self.send_block_one(self.node, peer, blk))
+                self.sent_blks.append((peer.node, blk.get_id()))
             else:
                 print(f"Skipping block to node {peer.node} by {self.node}")
     
@@ -203,3 +209,34 @@ class Peer:
         print(f"Sent block {blk.get_id()} to {r.node} by {s}")
         r.receive_blk(s, blk)
 
+    def mine(self):
+        mean = AVG_INTER_ARRIVAL/self.fraction_hashing_power
+        while True:
+            next_block = Block(self.chain_head)
+            curr_num_txns = 0
+            max_txn = random.randint(1, MAX_TRANSACTION)
+            for key, val in self.id_to_txn_dict.items():
+                if curr_num_txns == max_txn:
+                    break
+                next_block.add_txn(val)
+                curr_num_txns += 1
+            next_block.add_txn(Transaction(None, self.node, 50))
+            try:
+                yield self.env.timeout(np.random.exponential(mean))
+            except simpy.Interrupt:
+                print("Interrupted")
+                continue
+            self.chain_head = next_block.get_id()
+            self.chain_height += 1
+
+            for txn in next_block.block_txn_list:
+                if txn.sender is None:
+                    self.amount_list[txn.receiver] += txn.amount
+                    self.id_to_txn_dict.pop(txn.get_id(), None)
+                    continue
+                self.amount_list[txn.sender] -= txn.amount
+                self.amount_list[txn.receiver] += txn.amount
+                self.id_to_txn_dict.pop(txn.get_id(), None)
+            print(f"Block mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}")
+            yield self.env.process(self.send_block(self.node, next_block))
+        
