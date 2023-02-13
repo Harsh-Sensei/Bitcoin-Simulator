@@ -16,6 +16,8 @@ AVG_INTER_ARRIVAL = 100
 MAX_TRANSACTION = 998
 TOTAL_NODES = 20 # will be updated in main.py
 
+
+# Class storing data of one transaction
 class Transaction:
     def __init__(self, sender, receiver, amount):
         self.sender = sender
@@ -29,6 +31,7 @@ class Transaction:
     def get_id(self):
         return hashlib.sha256((str(self.__str__()) + str(self.time)).encode()).hexdigest()
 
+# Class for simulating network delays
 class Delays:
     def __init__(self, total_nodes, fast_nodes):
         self.rho = np.random.randint(LOW_RHO, HIGH_RHO, (total_nodes, total_nodes))
@@ -44,6 +47,7 @@ class Delays:
         return (self.rho[sender, receiver] + np.random.exponential(self.d_mean[sender, receiver]) 
         + data_size*self.inv_link_speed[sender, receiver])
     
+# Class for storing block and validating transactions
 class Block:
     def __init__(self, prev_hash, total_nodes=TOTAL_NODES):
         self.prev_hash = prev_hash
@@ -71,6 +75,7 @@ class Block:
     
     def get_id(self):
         return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)).encode()).hexdigest()
+
 
 class Peer:
     def __init__(self, node, mean, total_nodes, env, delay, genesis_block):
