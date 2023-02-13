@@ -18,6 +18,8 @@ TOTAL_NODES = 20 # will be updated in main.py
 
 
 # Class storing data of one transaction
+GLOBAL_BLOCK_HASHES = set()
+
 class Transaction:
     def __init__(self, sender, receiver, amount):
         self.sender = sender
@@ -100,6 +102,9 @@ class Peer:
         self.chain_height = 0
         self.prev_mining_block_hash = None
         self.mining_process = self.env.process(self.mine())
+        self.num_self_blocks = 0
+        self.total_num_in_main = 0 
+        self.gen_block_hashes = []
 
     def run(self):
         while True:
@@ -262,7 +267,10 @@ class Peer:
             self.hash_to_height_dict[next_block.get_id()] = self.chain_height
             self.hash_to_block_dict[next_block.get_id()] = next_block
             self.hash_to_time_dict[next_block.get_id()] = self.env.now
-
+            
+            self.gen_block_hashes.append(next_block.get_id())
+            global GLOBAL_BLOCK_HASHES
+            GLOBAL_BLOCK_HASHES.add(next_block.get_id())
             for txn in next_block.block_txn_list:
                 if txn.sender is None:
                     self.amount_list[txn.receiver] += txn.amount
@@ -275,8 +283,30 @@ class Peer:
             self.send_block(self.node, next_block)
             print(f"Block mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
             print(f"Txns: {[str(elem) for elem in next_block.block_txn_list]}")
-        
+    
+    def set_number_blocks_in_main(self):
+        curr_hash = self.chain_head
+        while curr_hash != "0":
+            if curr_hash in self.gen_block_hashes:
+                self.num_self_blocks += 1
+            curr_hash = self.hash_to_block_dict[curr_hash].prev_hash
+            self.total_num_in_main += 1
+
     def print_tree(self, filename):
+        self.set_number_blocks_in_main()
         with open(filename, 'w') as f:
-            f.write("\n".join([f"{str(elem[0])}({self.hash_to_time_dict[elem[0]]}) --> {str(elem[1])}({self.hash_to_time_dict[elem[1]]})" 
+            f.write("\n".join([f'"{str(elem[0])}({self.hash_to_time_dict[elem[0]]})" -> "{str(elem[1])}({self.hash_to_time_dict[elem[1]]})";' 
             for elem in self.blockchain_edgelist]))
+            f.write("\n")
+            f.write(f"{self.num_self_blocks}/{self.total_num_in_main} blocks in main chain(={self.num_self_blocks/self.total_num_in_main})")
+    
+    def graph_print(self, filename):
+        hash_to_idx_dict = {}
+        global GLOBAL_BLOCK_HASHES
+        for i , (hash, _) in enumerate(self.hash_to_block_dict.items()):
+            hash_to_idx_dict[hash] = list(GLOBAL_BLOCK_HASHES).index(hash)
+        with open(filename, 'w') as f:
+            f.write("digraph unix {\nsize=\"7,5\"; \n node [color=goldenrod2, style=filled];\n")
+            f.write("\n".join([f'"{str(hash_to_idx_dict[elem[0]])}(Ta={self.hash_to_time_dict[elem[0]]:.3f})" -> "{str(hash_to_idx_dict[elem[1]])}(Ta={self.hash_to_time_dict[elem[1]]:.3f})";' 
+            for elem in self.blockchain_edgelist]))
+            f.write("\n}")
