@@ -44,4 +44,6 @@ class Simulator:
         for elem in self.peer_list:
             elem.print_tree(f"./peer_outputs/peer_{elem.node}.txt")
     
-
+    def print_all_peer_graphs(self):
+        for elem in self.peer_list:
+            elem.graph_print(f"./peer_graphs/peer_{elem.node}.txt")

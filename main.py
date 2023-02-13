@@ -6,10 +6,10 @@ import igraph as ig
 
 def fetch_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--z0", type=float, default=0.5)
-    parser.add_argument("--z1", type=float, default=0.5) 
+    parser.add_argument("--z0", type=float, default=0.0)
+    parser.add_argument("--z1", type=float, default=0.0) 
     parser.add_argument("--n", type=int, default=20) 
-    parser.add_argument("--simtime", type=int, default=3000)
+    parser.add_argument("--simtime", type=int, default=5000)
     
     args = parser.parse_args()
     return args
@@ -23,7 +23,13 @@ if __name__ == "__main__":
     g.write_svg("graph.svg")
     ig.plot(g, "graph.png")
 
+    print("Fast Nodes", grph.fast_nodes)
+    print("Slow Nodes", grph.slow_nodes)
+    print("HighCPU Nodes", grph.highcpu_nodes)
+    print("LowCPU Nodes", grph.lowcpu_nodes)
+
     sim = Simulator(args, grph)
     sim.start_simulation()
     sim.print_all_peer_output()
+    sim.print_all_peer_graphs()
 
