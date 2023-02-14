@@ -12,7 +12,7 @@ HIGH_RHO = 500
 QUEUE_DELAY_FACTOR = 96
 MAX_BLOCK_SIZE = 1000
 MAX_COIN = 30
-AVG_INTER_ARRIVAL = 100
+AVG_INTER_ARRIVAL = 200
 MAX_TRANSACTION = 998
 TOTAL_NODES = 20 # will be updated in main.py
 
@@ -51,12 +51,14 @@ class Delays:
     
 # Class for storing block and validating transactions
 class Block:
-    def __init__(self, prev_hash, total_nodes=TOTAL_NODES):
+    def __init__(self, prev_hash, env, total_nodes=TOTAL_NODES):
         self.prev_hash = prev_hash
         self.block_size = 1
         self.block_txn_list = []
         self.total_nodes = total_nodes
         self.amount_list = np.zeros(self.total_nodes)
+        self.tm = env.now
+        self.gen_by = None
 
     def add_txn(self, txn):
         if self.block_size <= MAX_BLOCK_SIZE:
@@ -76,8 +78,10 @@ class Block:
 
     
     def get_id(self):
-        return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)).encode()).hexdigest()
+        return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)+str(self.tm)).encode()).hexdigest()
 
+    def set_gen_by(self, g):
+        self.gen_by = g
 
 class Peer:
     def __init__(self, node, mean, total_nodes, env, delay, genesis_block):
@@ -105,6 +109,8 @@ class Peer:
         self.num_self_blocks = 0
         self.total_num_in_main = 0 
         self.gen_block_hashes = []
+        global GLOBAL_BLOCK_HASHES
+        GLOBAL_BLOCK_HASHES.add(genesis_block.get_id())
 
     def run(self):
         while True:
@@ -209,7 +215,6 @@ class Peer:
 
         ### Mining for new block 
         self.mining_process.interrupt()
-        print(f"Block {blk.get_id()} from {sender} received by {self.node}")
         self.send_block(sender, blk)
     
     def send_txn(self, exclude, txn):
@@ -244,7 +249,7 @@ class Peer:
     def mine(self):
         mean = AVG_INTER_ARRIVAL/self.fraction_hashing_power
         while True:
-            next_block = Block(self.chain_head)
+            next_block = Block(self.chain_head, self.env)
             curr_num_txns = 0
             max_txn = random.randint(1, MAX_TRANSACTION)
 
@@ -263,6 +268,7 @@ class Peer:
                 continue
             self.chain_head = next_block.get_id()
             self.chain_height += 1
+            next_block.set_gen_by(self.node)
             
             self.hash_to_height_dict[next_block.get_id()] = self.chain_height
             self.hash_to_block_dict[next_block.get_id()] = next_block
@@ -281,7 +287,7 @@ class Peer:
                 self.id_to_txn_dict.pop(txn.get_id(), None)
             self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id()))
             self.send_block(self.node, next_block)
-            print(f"Block mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
+            print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
             print(f"Txns: {[str(elem) for elem in next_block.block_txn_list]}")
     
     def set_number_blocks_in_main(self):
@@ -307,6 +313,6 @@ class Peer:
             hash_to_idx_dict[hash] = list(GLOBAL_BLOCK_HASHES).index(hash)
         with open(filename, 'w') as f:
             f.write("digraph unix {\nsize=\"7,5\"; \n node [color=goldenrod2, style=filled];\n")
-            f.write("\n".join([f'"{str(hash_to_idx_dict[elem[0]])}(Ta={self.hash_to_time_dict[elem[0]]:.3f})" -> "{str(hash_to_idx_dict[elem[1]])}(Ta={self.hash_to_time_dict[elem[1]]:.3f})";' 
+            f.write("\n".join([f'"{str(hash_to_idx_dict[elem[0]])}(Ta={self.hash_to_time_dict[elem[0]]:.3f};By: {self.hash_to_block_dict[elem[0]].gen_by})" -> "{str(hash_to_idx_dict[elem[1]])}(Ta={self.hash_to_time_dict[elem[1]]:.3f};By: {self.hash_to_block_dict[elem[1]].gen_by})";' 
             for elem in self.blockchain_edgelist]))
             f.write("\n}")

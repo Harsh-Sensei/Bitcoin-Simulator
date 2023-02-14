@@ -11,7 +11,7 @@ class Simulator:
         self.args = args
         self.debug = debug
         self.delay = Delays(args.n, graph.fast_nodes)
-        self.genesis_block = Block("0")
+        self.genesis_block = Block("0", self.env)
         self.peer_list = [Peer(i, EXPO_MEAN, args.n, env, self.delay, self.genesis_block) for i in range(args.n)]
         self.set_all_peer_list()
         self.set_all_fhp()
