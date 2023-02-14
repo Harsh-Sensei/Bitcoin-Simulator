@@ -24,15 +24,28 @@ class Graph:
     def create_graph(self):
         connected = False
         curr_try = 0
+        valid = False
         # resolve self loops 
-        while not connected and curr_try < MAX_TRY:
-            degree_list = [random.randint(4, 8) for _ in range(self.n)]
+        while not connected and curr_try < MAX_TRY and not valid:
+            degree_list = [random.randint(5, 9) for _ in range(self.n)]
             try:
                 self.graph = ig.GraphBase.Degree_Sequence(degree_list,method="simple")
                 connected = self.graph.is_connected()
             except:
                 curr_try += 1
                 continue
+            tmp_el = list(set([elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]))
+            tmp_dict = {i : [] for i in range(self.n)}
+            for e in tmp_el:
+                tmp_dict[e[0]].append(e[1])
+            valid = True
+            for elem, val in tmp_dict.items():
+                if len(val)>8 or len(val)<4:
+                    valid = False
+                    break
+            
+        if curr_try >= MAX_TRY:
+            raise Exception("Cannot generate graph in {MAX_TRY} tries")
         self.edgelist = list(set([elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]))
         print(self.edgelist)
         p_graph = ig.Graph(self.n, self.edgelist)
