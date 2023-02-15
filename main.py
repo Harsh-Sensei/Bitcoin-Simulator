@@ -8,8 +8,8 @@ def fetch_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--z0", type=float, default=0.5)
     parser.add_argument("--z1", type=float, default=0.5) 
-    parser.add_argument("--n", type=int, default=30) 
-    parser.add_argument("--simtime", type=int, default=10000)
+    parser.add_argument("--n", type=int, default=20) 
+    parser.add_argument("--simtime", type=int, default=50000)
     
     args = parser.parse_args()
     return args

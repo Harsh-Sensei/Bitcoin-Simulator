@@ -47,7 +47,7 @@ class Graph:
         if curr_try >= MAX_TRY:
             raise Exception("Cannot generate graph in {MAX_TRY} tries")
         self.edgelist = list(set([elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]))
-        print(self.edgelist)
+        #print(self.edgelist)
         p_graph = ig.Graph(self.n, self.edgelist)
         p_graph.vs["label"] = range(self.n)
         p_graph.vs["color"] = "blue"
@@ -79,5 +79,5 @@ if __name__ == "__main__":
     test_args = Dict2Class(test_args)
     graph = Graph(test_args)
     out_graph = graph.create_graph()
-    print(len(out_graph.get_edgelist()))
+    #print(len(out_graph.get_edgelist()))
     ig.plot(out_graph, "test")

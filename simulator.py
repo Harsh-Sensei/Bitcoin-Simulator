@@ -1,7 +1,7 @@
 import simpy
 from peer import *
 
-EXPO_MEAN = 100
+EXPO_MEAN = 300000
 class Simulator:
     def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False):
         self.env = env

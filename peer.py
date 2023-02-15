@@ -12,7 +12,7 @@ HIGH_RHO = 500
 QUEUE_DELAY_FACTOR = 96
 MAX_BLOCK_SIZE = 1000
 MAX_COIN = 30
-AVG_INTER_ARRIVAL = 200
+AVG_INTER_ARRIVAL = 3000
 MAX_TRANSACTION = 998
 TOTAL_NODES = 20 # will be updated in main.py
 
@@ -154,6 +154,10 @@ class Peer:
         rewire = False
         if blk.prev_hash in self.hash_to_height_dict:
             height = self.hash_to_height_dict[blk.prev_hash] + 1
+            if blk.prev_hash == self.chain_head:
+                self.chain_head = blk.get_id()
+                self.chain_height = height
+                rewire = False
             if height > self.chain_height:
                 rewire = True
             self.hash_to_height_dict[blk.get_id()] = height
@@ -213,7 +217,8 @@ class Peer:
                     self.id_to_txn_dict.pop(txn.get_id(), None)
                 curr_blk_id = curr_blk.prev_hash
 
-        ### Mining for new block 
+        ### Mining for new block
+        print(f"Amount list for node {self.node} is {', '.join([f'{i}:{elem}' for i, elem in enumerate(self.amount_list)])}")
         self.mining_process.interrupt()
         self.send_block(sender, blk)
     
