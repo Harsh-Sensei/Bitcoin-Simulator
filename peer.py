@@ -12,8 +12,8 @@ HIGH_RHO = 500
 QUEUE_DELAY_FACTOR = 96
 MAX_BLOCK_SIZE = 1000
 MAX_COIN = 30
-AVG_INTER_ARRIVAL = 3000
-MAX_TRANSACTION = 998
+AVG_INTER_ARRIVAL = 1000
+MAX_TRANSACTION = 1
 TOTAL_NODES = 20 # will be updated in main.py
 
 
@@ -105,6 +105,7 @@ class Peer:
         self.chain_head = genesis_block.get_id()
         self.chain_height = 0
         self.prev_mining_block_hash = None
+        # mining
         self.mining_process = self.env.process(self.mine())
         self.num_self_blocks = 0
         self.total_num_in_main = 0 
@@ -143,10 +144,16 @@ class Peer:
         if blk.get_id() in self.hash_to_block_dict:
             return
         ### Verification of the block left
+        tmp_amount_list = np.copy(self.amount_list)
         for txn in blk.block_txn_list:
             if txn.sender is None:
+                tmp_amount_list[txn.receiver] += txn.amount
                 continue
-            if self.amount_list[txn.sender] < txn.amount:
+            else:
+                tmp_amount_list[txn.sender] -= txn.amount
+                tmp_amount_list[txn.receiver] += txn.amount
+            
+            if tmp_amount_list[txn.sender] < 0:
                 print("Invalid transaction")
                 return
 
@@ -165,6 +172,7 @@ class Peer:
             self.hash_to_time_dict[blk.get_id()] = self.env.now
             self.blockchain_edgelist.append((blk.prev_hash, blk.get_id()))
         else:
+            print("no parent")
             return
         if not rewire:
             for txn in blk.block_txn_list:
