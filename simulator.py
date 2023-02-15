@@ -2,7 +2,7 @@ import simpy
 from peer import *
 
 # mean interarrival time of transactions
-EXPO_MEAN = 1000
+EXPO_MEAN = 500
 
 # class to simulate the blockchain
 class Simulator:
