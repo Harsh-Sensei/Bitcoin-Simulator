@@ -1,7 +1,10 @@
 import simpy
 from peer import *
 
-EXPO_MEAN = 500
+# mean interarrival time of transactions
+EXPO_MEAN = 1000
+
+# class to simulate the blockchain
 class Simulator:
     def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False):
         self.env = env
@@ -16,12 +19,13 @@ class Simulator:
         self.set_all_peer_list()
         self.set_all_fhp()
 
+    # call this function to start the simulation
     def start_simulation(self):
         for elem in self.peer_list:
             self.env.process(elem.run())
         self.env.run(until=self.simtime)
         
-    
+    #function to set neighbour edge list in graph
     def set_all_peer_list(self):
         edge_list = self.graph.edgelist
         peer_dict = {k : [] for k in range(self.args.n)}
@@ -32,6 +36,7 @@ class Simulator:
         for elem in self.peer_list:
             elem.set_peer_list(list(set(peer_dict[elem.node])))
     
+    # set the fractional hashing power of node depending on high or low CPU
     def set_all_fhp(self):
         unit_hp = 1/(10*len(self.graph.highcpu_nodes) + len(self.graph.lowcpu_nodes))
         for elem in self.peer_list:

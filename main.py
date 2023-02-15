@@ -4,20 +4,24 @@ from simulator import Simulator
 import peer
 import igraph as ig
 
+# function to get the input arguments 
 def fetch_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--z0", type=float, default=0.5)
     parser.add_argument("--z1", type=float, default=0.5) 
-    parser.add_argument("--n", type=int, default=20) 
-    parser.add_argument("--simtime", type=int, default=25000)
+    parser.add_argument("--n", type=int, default=30) 
+    parser.add_argument("--simtime", type=int, default=20000)
     
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
+    # initialize all the declared arguments
     args = fetch_args()
     peer.TOTAL_NODES = args.n
+
+    # create the connected graph of the topology of the nodes
     grph = Graph(args)
     g = grph.create_graph()
     g.write_svg("graph.svg")
@@ -28,6 +32,7 @@ if __name__ == "__main__":
     print("HighCPU Nodes", grph.highcpu_nodes)
     print("LowCPU Nodes", grph.lowcpu_nodes)
 
+    # start the simulator
     sim = Simulator(args, grph)
     sim.start_simulation()
     sim.print_all_peer_output()
