@@ -6,7 +6,7 @@ EXPO_MEAN = 500
 
 # class to simulate the blockchain
 class Simulator:
-    def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False):
+    def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False, add_malicious=False):
         self.env = env
         self.name = name
         self.simtime = args.simtime
@@ -15,7 +15,9 @@ class Simulator:
         self.debug = debug
         self.delay = Delays(args.n, graph.fast_nodes)
         self.genesis_block = Block("0", self.env)
-        self.peer_list = [Peer(i, EXPO_MEAN, args.n, env, self.delay, self.genesis_block) for i in range(args.n)]
+        self.peer_list = [Peer(i, EXPO_MEAN, args.n+1 if add_malicious else args.n, env, self.delay, self.genesis_block) for i in range(args.n)]
+        if add_malicious:
+            self.peer_list.append(SelfishMiner(self.n, EXPO_MEAN, args.n+1, env, self.delay, self.genesis_block))
         self.set_all_peer_list()
         self.set_all_fhp()
 

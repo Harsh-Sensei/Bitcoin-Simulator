@@ -25,7 +25,7 @@ class Graph:
         self.slow_nodes= []
         self.fast_nodes = []
 
-    def create_graph(self):
+    def create_graph(self, add_malicious=False, zeta=0):
         connected = False
         curr_try = 0
         valid = False
@@ -56,14 +56,6 @@ class Graph:
         # save the edgelist of the graph to be used in our peer file
         self.edgelist = list(set([elem for elem in self.graph.get_edgelist() if elem[0]!=elem[1]]))
         #print(self.edgelist)
-        # set all the parameters of the graph to display
-        p_graph = ig.Graph(self.n, self.edgelist)
-        p_graph.vs["label"] = range(self.n)
-        p_graph.vs["color"] = "blue"
-        p_graph.vs["size"] = 0.6
-        p_graph.es["color"] = "black"
-        p_graph.es["width"] = 1
-
         # initialize slow and fast nodes and low and high CPU nodes randomly wrt the given parameters
         for i in range(self.n):
             if random.random() < self.z1:
@@ -75,7 +67,20 @@ class Graph:
                 self.slow_nodes.append(i)
             else:
                 self.fast_nodes.append(i)
-        
+
+        if add_malicious:
+            neigh_m = random.sample(self.fast_nodes, zeta)
+            for elem in neigh_m:
+                self.edgelist.append([self.n+1, elem])
+
+        # set all the parameters of the graph to display
+        p_graph = ig.Graph(self.n + 1 if add_malicious else self.n, self.edgelist)
+        p_graph.vs["label"] = range(self.n + 1 if add_malicious else self.n)
+        p_graph.vs["color"] = "blue" if not add_malicious else ["blue" if i < self.n else "red" for i in range(self.n+1)]
+        p_graph.vs["size"] = 0.6
+        p_graph.es["color"] = "black"
+        p_graph.es["width"] = 1
+
         return p_graph
 
 

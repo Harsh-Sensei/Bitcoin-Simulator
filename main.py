@@ -4,10 +4,18 @@ from simulator import Simulator
 import peer
 import igraph as ig
 
+DEBUG = True
+ZETA = 5
+ADD_MALICIOUS = True
+
+if not DEBUG:
+    print = lambda x : x
+
+
 # function to get the input arguments 
 def fetch_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--z0", type=float, default=0.5)
+    parser.add_argument("--z0", type=float, default=0.5) #
     parser.add_argument("--z1", type=float, default=0.5) 
     parser.add_argument("--n", type=int, default=30) 
     parser.add_argument("--simtime", type=int, default=30000)
@@ -23,7 +31,7 @@ if __name__ == "__main__":
 
     # create the connected graph of the topology of the nodes
     grph = Graph(args)
-    g = grph.create_graph()
+    g = grph.create_graph(add_malicious=ADD_MALICIOUS, zeta=ZETA)
     g.write_svg("graph.svg")
     ig.plot(g, "graph.png")
 
