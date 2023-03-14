@@ -68,10 +68,14 @@ class Graph:
             else:
                 self.fast_nodes.append(i)
 
+
         if add_malicious:
-            neigh_m = random.sample(self.fast_nodes, zeta)
+            self.fast_nodes.append(self.n)
+            self.highcpu_nodes.append(self.n)
+            neigh_m = random.sample(self.fast_nodes[:-1], zeta)
+            print("Malicious neigh: ", neigh_m)
             for elem in neigh_m:
-                self.edgelist.append([self.n+1, elem])
+                self.edgelist.append([self.n, elem])
 
         # set all the parameters of the graph to display
         p_graph = ig.Graph(self.n + 1 if add_malicious else self.n, self.edgelist)

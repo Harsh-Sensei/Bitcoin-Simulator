@@ -13,11 +13,16 @@ class Simulator:
         self.graph = graph
         self.args = args
         self.debug = debug
-        self.delay = Delays(args.n, graph.fast_nodes)
+        self.delay = Delays(args.n+1 if add_malicious else args.n, graph.fast_nodes)
         self.genesis_block = Block("0", self.env)
+        self.add_malicious = add_malicious
         self.peer_list = [Peer(i, EXPO_MEAN, args.n+1 if add_malicious else args.n, env, self.delay, self.genesis_block) for i in range(args.n)]
         if add_malicious:
-            self.peer_list.append(SelfishMiner(self.n, EXPO_MEAN, args.n+1, env, self.delay, self.genesis_block))
+            if MALICIOUS_TYPE == 0:
+                self.peer_list.append(SelfishMiner(args.n, EXPO_MEAN, args.n+1, env, self.delay, self.genesis_block))
+            elif MALICIOUS_TYPE == 1:
+                self.peer_list.append(StubMiner(args.n, EXPO_MEAN, args.n+1, env, self.delay, self.genesis_block))
+
         self.set_all_peer_list()
         self.set_all_fhp()
 
@@ -30,7 +35,10 @@ class Simulator:
     #function to set neighbour edge list in graph
     def set_all_peer_list(self):
         edge_list = self.graph.edgelist
-        peer_dict = {k : [] for k in range(self.args.n)}
+        peer_dict = {k : [] for k in range(self.args.n+1 if self.add_malicious else self.args.n)}
+        
+        # print(peer_dict)
+        # print(self.add_malicious)
         for elem in edge_list:
             peer_dict[elem[0]].append(self.peer_list[elem[1]])
             peer_dict[elem[1]].append(self.peer_list[elem[0]])

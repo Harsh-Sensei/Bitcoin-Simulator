@@ -1,24 +1,23 @@
+DEBUG = True
+if not DEBUG:
+    print = lambda *x : x
+
 import argparse
 from graph import Graph
 from simulator import Simulator
 import peer
 import igraph as ig
 
-DEBUG = True
-ZETA = 5
+ZETA = 3
 ADD_MALICIOUS = True
-
-if not DEBUG:
-    print = lambda x : x
-
 
 # function to get the input arguments 
 def fetch_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--z0", type=float, default=0.5) #
     parser.add_argument("--z1", type=float, default=0.5) 
-    parser.add_argument("--n", type=int, default=30) 
-    parser.add_argument("--simtime", type=int, default=30000)
+    parser.add_argument("--n", type=int, default=10) 
+    parser.add_argument("--simtime", type=int, default=10000)
     
     args = parser.parse_args()
     return args
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     print("LowCPU Nodes", grph.lowcpu_nodes)
 
     # start the simulator
-    sim = Simulator(args, grph)
+    sim = Simulator(args, grph, add_malicious=ADD_MALICIOUS)
     sim.start_simulation()
     sim.print_all_peer_output()
     sim.print_all_peer_graphs()
