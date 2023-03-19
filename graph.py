@@ -15,6 +15,7 @@ ig.config["plotting.palette"] = "rainbow"
 # class to generate the network graph
 class Graph:
     def __init__(self, args):
+        # initialize all the parameters of the graph
         self.z0 = args.z0
         self.z1 = args.z1
         self.n = args.n
@@ -25,6 +26,7 @@ class Graph:
         self.slow_nodes= []
         self.fast_nodes = []
 
+    # function to create the graph
     def create_graph(self, add_malicious=False, zeta=0):
         connected = False
         curr_try = 0
@@ -68,13 +70,13 @@ class Graph:
             else:
                 self.fast_nodes.append(i)
 
-
+        # add the malicious nodes to the graph incase required
         if add_malicious:
-            self.fast_nodes.append(self.n)
-            self.highcpu_nodes.append(self.n)
-            neigh_m = random.sample(self.fast_nodes[:-1], zeta)
-            print("Malicious neigh: ", neigh_m)
-            for elem in neigh_m:
+            self.fast_nodes.append(self.n) # add the malicious node to the fast nodes
+            self.highcpu_nodes.append(self.n) # add the malicious node to the high CPU nodes
+            neigh_m = random.sample(self.fast_nodes[:-1], zeta) # select zeta nodes from the fast nodes
+            print("Malicious neigh: ", neigh_m) 
+            for elem in neigh_m: # add the edges between the malicious node and the selected nodes
                 self.edgelist.append([self.n, elem])
 
         # set all the parameters of the graph to display

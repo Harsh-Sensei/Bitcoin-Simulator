@@ -100,6 +100,7 @@ class Block:
     def get_id(self):
         return hashlib.sha256((str(self.prev_hash)+str(self.block_txn_list)+str(self.tm)).encode()).hexdigest()
 
+    # get the generation of the block
     def set_gen_by(self, g):
         self.gen_by = g
 
