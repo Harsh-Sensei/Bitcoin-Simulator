@@ -394,6 +394,7 @@ class Peer:
 
     # helper function to print the graph structure of the blockchain tree 
     def graph_print(self, filename):
+        self.set_number_blocks_in_main()
         hash_to_idx_dict = {}
         global GLOBAL_BLOCK_HASHES
         for i , (hash, _) in enumerate(self.hash_to_block_dict.items()):
@@ -637,10 +638,12 @@ class SelfishMiner(Peer):
         return self.total_num_in_main/self.num_blks_mined
     
     def find_mpu_overall(self):
+        self.set_number_blocks_in_main()
         global TOTAL_BLOCKS_MINED
         return self.chain_height/TOTAL_BLOCKS_MINED
 
     def graph_private_chain(self, filename):
+        self.set_number_blocks_in_main()
         hash_to_idx_dict = {}
         global GLOBAL_BLOCK_HASHES
         for i , (hash, _) in enumerate(self.hash_to_block_dict.items()):
@@ -652,11 +655,15 @@ class SelfishMiner(Peer):
             f.write("\n}")
 
     def mark_malicious_event(self):
+        self.set_number_blocks_in_main()
         path = "malicious_events/"
         isExist = os.path.exists(path)
         if not isExist:
             os.makedirs(path)
-        filename = path+str(self.env.now)
+        time = str(self.env.now)
+        filename = path+ "private_chain" + time
+        self.graph_private_chain(filename)
+        filename = path+ "global_chain" + time
         self.graph_print(filename)
 
 class StubMiner(Peer):
