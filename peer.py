@@ -5,6 +5,7 @@ import random
 import hashlib
 import time
 import simpy
+import os
 
 MALICIOUS_TYPE = 1 # 0 for selfish miner and 1 for stub miner 
 
@@ -24,6 +25,7 @@ TOTAL_NODES = None # will be updated in main.py
 
 # set to convert the hashes into unique ids
 GLOBAL_BLOCK_HASHES = set()
+TOTAL_BLOCKS_MINED = 0
 
 # Class storing data of one transaction
 class Transaction:
@@ -318,7 +320,9 @@ class Peer:
 
     # function to simulate the mining process and the PoW
     def mine(self):
+        global TOTAL_BLOCKS_MINED
         mean = AVG_INTER_ARRIVAL/self.fraction_hashing_power # mean of the exponential distribution for interarrival of blocks 
+        
         while True:
             next_block = Block(self.chain_head, self.env)   # initialize a new block
             curr_num_txns = 0                              # number of txns in the block
@@ -365,6 +369,7 @@ class Peer:
                 self.id_to_txn_dict.pop(txn.get_id(), None)
             self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id())) # add the block to the blockchain edgelist
             self.send_block(self.node, next_block) # send the block to all peers
+            TOTAL_BLOCKS_MINED += 1
             print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
             print(f"Txns: {[str(elem) for elem in next_block.block_txn_list]}")
     
@@ -407,23 +412,44 @@ class SelfishMiner(Peer):
         self.chain_length_diff = 0
         self.private_chain_head = self.chain_head
         self.height_increased = False
+        self.events = []
 
+    def update_bookkeeping(self, next_block):
+        self.hash_to_height_dict[next_block.get_id()] = self.chain_height
+        self.hash_to_block_dict[next_block.get_id()] = next_block
+        self.hash_to_time_dict[next_block.get_id()] = self.env.now
+        # update the amount list
+        for txn in next_block.block_txn_list:
+            if txn.sender is None:
+                self.amount_list[txn.receiver] += txn.amount
+                self.id_to_txn_dict.pop(txn.get_id(), None)
+                continue
+            self.amount_list[txn.sender] -= txn.amount
+            self.amount_list[txn.receiver] += txn.amount
+            self.id_to_txn_dict.pop(txn.get_id(), None)
+        self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id())) # add the block to the blockchain edgelist
     # function to simulate the selfish-mining process and the PoW
     def mine(self):
+        global TOTAL_BLOCKS_MINED
         mean = AVG_INTER_ARRIVAL/self.fraction_hashing_power # mean of the exponential distribution for interarrival of blocks 
         while True:
             print("Malicious node mining")
+            self.mark_malicious_event()
             if len(self.private_block_chain)>0:
                 if self.height_increased:
                     if self.chain_length_diff == 1:
                         next_block = self.private_block_chain[0]
+                        # update the dictionaries
+                        self.update_bookkeeping(next_block=next_block)
                         self.send_block(self.node, next_block) # send the block to all peers'
                         print("Releasing private block:", self.chain_length_diff)
                         print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
                         print(f"Txns: {[str(elem) for elem in next_block.block_txn_list]}")
                         self.private_block_chain.pop(0)
-                        
+
                         next_block = self.private_block_chain[0]
+                        # update the amount list
+                        self.update_bookkeeping(next_block=next_block)
                         self.send_block(self.node, next_block) # send the block to all peers'
                         print("Releasing private block : ", self.chain_length_diff)
                         print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
@@ -436,6 +462,8 @@ class SelfishMiner(Peer):
                     
                     else:
                         next_block = self.private_block_chain[0]
+                        # update the amount list
+                        self.update_bookkeeping(next_block=next_block)
                         self.send_block(self.node, next_block) # send the block to all peers'
                         print("Releasing private block : ", self.chain_length_diff)
                         print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
@@ -469,28 +497,13 @@ class SelfishMiner(Peer):
             self.private_chain_head = next_block.get_id() # update the chain head
             next_block.set_gen_by(self.node)
             
-            # update the dictionaries
-            self.hash_to_height_dict[next_block.get_id()] = self.chain_height
-            self.hash_to_block_dict[next_block.get_id()] = next_block
-            self.hash_to_time_dict[next_block.get_id()] = self.env.now
-            
             self.gen_block_hashes.append(next_block.get_id()) # add the block to the list of blocks mined by the node
             self.num_blks_mined += 1 # update the number of blocks mined
             global GLOBAL_BLOCK_HASHES
             GLOBAL_BLOCK_HASHES.add(next_block.get_id())
-
-            # update the amount list
-            for txn in next_block.block_txn_list:
-                if txn.sender is None:
-                    self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                    continue
-                self.amount_list[txn.sender] -= txn.amount
-                self.amount_list[txn.receiver] += txn.amount
-                self.id_to_txn_dict.pop(txn.get_id(), None)
-            self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id())) # add the block to the blockchain edgelist
             
             self.private_block_chain.append(next_block)
+            TOTAL_BLOCKS_MINED += 1
             print("Mined private block")
             self.chain_length_diff += 1
 
@@ -526,7 +539,6 @@ class SelfishMiner(Peer):
         if blk.prev_hash in self.hash_to_height_dict:
             height = self.hash_to_height_dict[blk.prev_hash] + 1 # calculate height of the block
 
-
             # if the parent is the chain head, it means block is getting added to the main chain, no rewire
             if blk.prev_hash == self.chain_head:
                 self.chain_head = blk.get_id()
@@ -534,7 +546,6 @@ class SelfishMiner(Peer):
                 rewire = False
                 self.height_increased = True
 
-            
             # if the parent is not the chain head, it means block is getting added to a side chain, rewire
             if height > self.chain_height:
                 rewire = True
@@ -552,15 +563,16 @@ class SelfishMiner(Peer):
         
         # deal with block getting added to the main chain
         if not rewire:
-            for txn in blk.block_txn_list:
-                # adjust all the amounts with the transactions and remove the transaction from the transaction pool
-                if txn.sender is None:
+            if len(self.private_block_chain) == 0:
+                for txn in blk.block_txn_list:
+                    # adjust all the amounts with the transactions and remove the transaction from the transaction pool
+                    if txn.sender is None:
+                        self.amount_list[txn.receiver] += txn.amount
+                        self.id_to_txn_dict.pop(txn.get_id(), None)
+                        continue
+                    self.amount_list[txn.sender] -= txn.amount
                     self.amount_list[txn.receiver] += txn.amount
                     self.id_to_txn_dict.pop(txn.get_id(), None)
-                    continue
-                self.amount_list[txn.sender] -= txn.amount
-                self.amount_list[txn.receiver] += txn.amount
-                self.id_to_txn_dict.pop(txn.get_id(), None)
         
         # fork resolution
         else:
@@ -580,35 +592,34 @@ class SelfishMiner(Peer):
                     hash1 = self.hash_to_block_dict[hash1].prev_hash
                     hash2 = self.hash_to_block_dict[hash2].prev_hash
             
-            lagging_hash = None
-
             # now reverse all the main chain txns upto the forked block
             while curr_blk_id != parent_hash:
                 curr_blk = self.hash_to_block_dict[curr_blk_id]
-                for txn in curr_blk.block_txn_list:
-                    if txn.sender is None:
+                if len(self.private_block_chain) == 0:
+                    for txn in curr_blk.block_txn_list:
+                        if txn.sender is None:
+                            self.amount_list[txn.receiver] -= txn.amount
+                            self.id_to_txn_dict[txn.get_id()] = txn
+                            continue
+                        self.amount_list[txn.sender] += txn.amount
                         self.amount_list[txn.receiver] -= txn.amount
                         self.id_to_txn_dict[txn.get_id()] = txn
-                        continue
-                    self.amount_list[txn.sender] += txn.amount
-                    self.amount_list[txn.receiver] -= txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                lagging_hash = curr_blk_id
-                curr_blk_id = curr_blk.prev_hash
+                    curr_blk_id = curr_blk.prev_hash
             
             # and now add all the txns in the new sub chain that is part of the main chain 
             curr_blk_id = blk.get_id()
             while curr_blk_id != parent_hash:
-                curr_blk = self.hash_to_block_dict[curr_blk_id]
-                for txn in curr_blk.block_txn_list:
-                    if txn.sender is None:
+                if len(self.private_block_chain) == 0:
+                    curr_blk = self.hash_to_block_dict[curr_blk_id]
+                    for txn in curr_blk.block_txn_list:
+                        if txn.sender is None:
+                            self.amount_list[txn.receiver] += txn.amount
+                            self.id_to_txn_dict.pop(txn.get_id(), None)
+                            continue
+                        self.amount_list[txn.sender] -= txn.amount
                         self.amount_list[txn.receiver] += txn.amount
                         self.id_to_txn_dict.pop(txn.get_id(), None)
-                        continue
-                    self.amount_list[txn.sender] -= txn.amount
-                    self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                curr_blk_id = curr_blk.prev_hash
+                    curr_blk_id = curr_blk.prev_hash
 
         ### Mining for new block
         print(f"Amount list for node {self.node} is {', '.join([f'{i}:{elem}' for i, elem in enumerate(self.amount_list)])}")
@@ -620,7 +631,33 @@ class SelfishMiner(Peer):
             else:
                 self.private_chain_head = self.chain_head
         self.mining_process.interrupt()
+    
+    def find_mpu_adv(self):
+        self.set_number_blocks_in_main()
+        return self.total_num_in_main/self.num_blks_mined
+    
+    def find_mpu_overall(self):
+        global TOTAL_BLOCKS_MINED
+        return self.chain_height/TOTAL_BLOCKS_MINED
 
+    def graph_private_chain(self, filename):
+        hash_to_idx_dict = {}
+        global GLOBAL_BLOCK_HASHES
+        for i , (hash, _) in enumerate(self.hash_to_block_dict.items()):
+            hash_to_idx_dict[hash] = list(GLOBAL_BLOCK_HASHES).index(hash)
+        with open(filename, 'w') as f:
+            f.write("digraph unix {\nsize=\"7,5\"; \n node [color=goldenrod2, style=filled];\n")
+            f.write("\n".join([f'"{hash_to_idx_dict[self.private_block_chain[i]]}" -> "{hash_to_idx_dict[self.private_block_chain[i+1]]}";' 
+            for i in range(len(self.private_block_chain)-1)]))
+            f.write("\n}")
+
+    def mark_malicious_event(self):
+        path = "malicious_events/"
+        isExist = os.path.exists(path)
+        if not isExist:
+            os.makedirs(path)
+        filename = path+str(self.env.now)
+        self.graph_print(filename)
 
 class StubMiner(Peer):
     def __init__(self, node, mean, total_nodes, env, delay, genesis_block):
@@ -629,15 +666,33 @@ class StubMiner(Peer):
         self.chain_length_diff = 0
         self.private_chain_head = self.chain_head
         self.height_increased = False
+        self.events = []
 
+    def update_bookkeeping(self, next_block):
+        self.hash_to_height_dict[next_block.get_id()] = self.chain_height
+        self.hash_to_block_dict[next_block.get_id()] = next_block
+        self.hash_to_time_dict[next_block.get_id()] = self.env.now
+        # update the amount list
+        for txn in next_block.block_txn_list:
+            if txn.sender is None:
+                self.amount_list[txn.receiver] += txn.amount
+                self.id_to_txn_dict.pop(txn.get_id(), None)
+                continue
+            self.amount_list[txn.sender] -= txn.amount
+            self.amount_list[txn.receiver] += txn.amount
+            self.id_to_txn_dict.pop(txn.get_id(), None)
+        self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id())) # add the block to the blockchain edgelist
     # function to simulate the selfish-mining process and the PoW
     def mine(self):
+        global TOTAL_BLOCKS_MINED
         mean = AVG_INTER_ARRIVAL/self.fraction_hashing_power # mean of the exponential distribution for interarrival of blocks 
         while True:
             print("Malicious node mining")
+            self.mark_malicious_event()
             if len(self.private_block_chain)>0:
                 if self.height_increased:
                     next_block = self.private_block_chain[0]
+                    self.update_bookkeeping(next_block=next_block)
                     self.send_block(self.node, next_block) # send the block to all peers'
                     print("Releasing private block : ", self.chain_length_diff)
                     print(f"Block {next_block.get_id()} mined by {self.node} with {len(next_block.block_txn_list)} transactions; money left  {self.amount_list[self.node]}; time {self.env.now}")
@@ -671,28 +726,13 @@ class StubMiner(Peer):
             self.private_chain_head = next_block.get_id() # update the chain head
             next_block.set_gen_by(self.node)
             
-            # update the dictionaries
-            self.hash_to_height_dict[next_block.get_id()] = self.chain_height
-            self.hash_to_block_dict[next_block.get_id()] = next_block
-            self.hash_to_time_dict[next_block.get_id()] = self.env.now
-            
             self.gen_block_hashes.append(next_block.get_id()) # add the block to the list of blocks mined by the node
             self.num_blks_mined += 1 # update the number of blocks mined
             global GLOBAL_BLOCK_HASHES
             GLOBAL_BLOCK_HASHES.add(next_block.get_id())
-
-            # update the amount list
-            for txn in next_block.block_txn_list:
-                if txn.sender is None:
-                    self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                    continue
-                self.amount_list[txn.sender] -= txn.amount
-                self.amount_list[txn.receiver] += txn.amount
-                self.id_to_txn_dict.pop(txn.get_id(), None)
-            self.blockchain_edgelist.append((next_block.prev_hash, next_block.get_id())) # add the block to the blockchain edgelist
             
             self.private_block_chain.append(next_block)
+            TOTAL_BLOCKS_MINED += 1
             print("Mined private block")
             self.chain_length_diff += 1
 
@@ -728,7 +768,6 @@ class StubMiner(Peer):
         if blk.prev_hash in self.hash_to_height_dict:
             height = self.hash_to_height_dict[blk.prev_hash] + 1 # calculate height of the block
 
-
             # if the parent is the chain head, it means block is getting added to the main chain, no rewire
             if blk.prev_hash == self.chain_head:
                 self.chain_head = blk.get_id()
@@ -736,7 +775,6 @@ class StubMiner(Peer):
                 rewire = False
                 self.height_increased = True
 
-            
             # if the parent is not the chain head, it means block is getting added to a side chain, rewire
             if height > self.chain_height:
                 rewire = True
@@ -754,15 +792,16 @@ class StubMiner(Peer):
         
         # deal with block getting added to the main chain
         if not rewire:
-            for txn in blk.block_txn_list:
-                # adjust all the amounts with the transactions and remove the transaction from the transaction pool
-                if txn.sender is None:
+            if len(self.private_block_chain) == 0:
+                for txn in blk.block_txn_list:
+                    # adjust all the amounts with the transactions and remove the transaction from the transaction pool
+                    if txn.sender is None:
+                        self.amount_list[txn.receiver] += txn.amount
+                        self.id_to_txn_dict.pop(txn.get_id(), None)
+                        continue
+                    self.amount_list[txn.sender] -= txn.amount
                     self.amount_list[txn.receiver] += txn.amount
                     self.id_to_txn_dict.pop(txn.get_id(), None)
-                    continue
-                self.amount_list[txn.sender] -= txn.amount
-                self.amount_list[txn.receiver] += txn.amount
-                self.id_to_txn_dict.pop(txn.get_id(), None)
         
         # fork resolution
         else:
@@ -782,35 +821,34 @@ class StubMiner(Peer):
                     hash1 = self.hash_to_block_dict[hash1].prev_hash
                     hash2 = self.hash_to_block_dict[hash2].prev_hash
             
-            lagging_hash = None
-
             # now reverse all the main chain txns upto the forked block
             while curr_blk_id != parent_hash:
                 curr_blk = self.hash_to_block_dict[curr_blk_id]
-                for txn in curr_blk.block_txn_list:
-                    if txn.sender is None:
+                if len(self.private_block_chain) == 0:
+                    for txn in curr_blk.block_txn_list:
+                        if txn.sender is None:
+                            self.amount_list[txn.receiver] -= txn.amount
+                            self.id_to_txn_dict[txn.get_id()] = txn
+                            continue
+                        self.amount_list[txn.sender] += txn.amount
                         self.amount_list[txn.receiver] -= txn.amount
                         self.id_to_txn_dict[txn.get_id()] = txn
-                        continue
-                    self.amount_list[txn.sender] += txn.amount
-                    self.amount_list[txn.receiver] -= txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                lagging_hash = curr_blk_id
-                curr_blk_id = curr_blk.prev_hash
+                    curr_blk_id = curr_blk.prev_hash
             
             # and now add all the txns in the new sub chain that is part of the main chain 
             curr_blk_id = blk.get_id()
             while curr_blk_id != parent_hash:
-                curr_blk = self.hash_to_block_dict[curr_blk_id]
-                for txn in curr_blk.block_txn_list:
-                    if txn.sender is None:
+                if len(self.private_block_chain) == 0:
+                    curr_blk = self.hash_to_block_dict[curr_blk_id]
+                    for txn in curr_blk.block_txn_list:
+                        if txn.sender is None:
+                            self.amount_list[txn.receiver] += txn.amount
+                            self.id_to_txn_dict.pop(txn.get_id(), None)
+                            continue
+                        self.amount_list[txn.sender] -= txn.amount
                         self.amount_list[txn.receiver] += txn.amount
                         self.id_to_txn_dict.pop(txn.get_id(), None)
-                        continue
-                    self.amount_list[txn.sender] -= txn.amount
-                    self.amount_list[txn.receiver] += txn.amount
-                    self.id_to_txn_dict.pop(txn.get_id(), None)
-                curr_blk_id = curr_blk.prev_hash
+                    curr_blk_id = curr_blk.prev_hash
 
         ### Mining for new block
         print(f"Amount list for node {self.node} is {', '.join([f'{i}:{elem}' for i, elem in enumerate(self.amount_list)])}")
@@ -821,10 +859,31 @@ class StubMiner(Peer):
                 print("Decreasing chain length diff :", self.chain_length_diff)
             else:
                 self.private_chain_head = self.chain_head
-
         self.mining_process.interrupt()
+    
+    def find_mpu_adv(self):
+        self.set_number_blocks_in_main()
+        return self.total_num_in_main/self.num_blks_mined
+    
+    def find_mpu_overall(self):
+        global TOTAL_BLOCKS_MINED
+        return self.chain_height/TOTAL_BLOCKS_MINED
 
-## TODO 
-# Setting high speed neighbours and number of neighbours
-# Change amount list after sending a block
+    def graph_private_chain(self, filename):
+        hash_to_idx_dict = {}
+        global GLOBAL_BLOCK_HASHES
+        for i , (hash, _) in enumerate(self.hash_to_block_dict.items()):
+            hash_to_idx_dict[hash] = list(GLOBAL_BLOCK_HASHES).index(hash)
+        with open(filename, 'w') as f:
+            f.write("digraph unix {\nsize=\"7,5\"; \n node [color=goldenrod2, style=filled];\n")
+            f.write("\n".join([f'"{hash_to_idx_dict[self.private_block_chain[i]]}" -> "{hash_to_idx_dict[self.private_block_chain[i+1]]}";' 
+            for i in range(len(self.private_block_chain)-1)]))
+            f.write("\n}")
 
+    def mark_malicious_event(self):
+        path = "malicious_events/"
+        isExist = os.path.exists(path)
+        if not isExist:
+            os.makedirs(path)
+        filename = path+str(self.env.now)
+        self.graph_print(filename)

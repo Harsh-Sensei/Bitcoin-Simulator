@@ -6,7 +6,7 @@ EXPO_MEAN = 500
 
 # class to simulate the blockchain
 class Simulator:
-    def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False, add_malicious=False):
+    def __init__(self, args, graph, env=simpy.Environment(), name="htg", debug=False, add_malicious=False, malicious_power=0.3):
         # initialize the simulator with the required parameters
         self.env = env
         self.name = name
@@ -17,6 +17,7 @@ class Simulator:
         self.delay = Delays(args.n+1 if add_malicious else args.n, graph.fast_nodes)
         self.genesis_block = Block("0", self.env)
         self.add_malicious = add_malicious
+        self.malicious_power = malicious_power
         # adjust the peer list for the malicious node
         self.peer_list = [Peer(i, EXPO_MEAN, args.n+1 if add_malicious else args.n, env, self.delay, self.genesis_block) for i in range(args.n)]
         # check for what type of malicious node to add
@@ -51,12 +52,14 @@ class Simulator:
     
     # set the fractional hashing power of node depending on high or low CPU
     def set_all_fhp(self):
-        unit_hp = 1/(10*len(self.graph.highcpu_nodes) + len(self.graph.lowcpu_nodes))
+        unit_hp = (1-(self.malicious_power if self.add_malicious else 0))/(10*len(self.graph.highcpu_nodes) + len(self.graph.lowcpu_nodes))
         for elem in self.peer_list:
             if elem.node in self.graph.highcpu_nodes:
                 elem.set_fraction_hashing_power(10*unit_hp)
             else:
                 elem.set_fraction_hashing_power(unit_hp)
+        if self.add_malicious:
+            self.peer_list[-1].set_fraction_hashing_power(self.malicious_power)
     
     # print the output of all the peers
     def print_all_peer_output(self):
