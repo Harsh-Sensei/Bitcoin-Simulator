@@ -1,7 +1,5 @@
-# CS 765 Project Part 1 + 2
 # P2P CryptoCurrency Network Simulation
-## Team Members: 
-Harsh Shah - 200050049;  Shubham Bakare - 200050133;  Sahil Mahajan - 200050124; 
+An event driven simulator for emulating bitcoin mining and transactions with network delays and selfish-mining attacks over arbitrary network topology.
 
 ## Instructions for Compiling and Running 
 1. Run the file main.py present in the root directory using the command : ```python3 main.py > output.txt```
